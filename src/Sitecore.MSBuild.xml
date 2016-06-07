@@ -1,0 +1,230 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\ExtensionPack\4.0\MSBuild.ExtensionPack.tasks" />
+
+  <PropertyGroup>
+
+    <!-- Shared Variables -->
+    
+    <!-- 
+      Setup_Website: Add /website to the end of this for iis path
+      Setup_Sitecore: Defined folder that sitecore is installed into -->
+    <WebApplicationRoot>C:\GITProjects\Sitecore-MSBuild\build\</WebApplicationRoot>
+    
+    <!-- 
+      Setup_Website: defined globally so that we don't polute it with Sitecore specific conventions -->
+    <WebApplicationPath>$(WebApplicationRoot)\website</WebApplicationPath>
+
+    <!-- 
+      Setup_Website: AppPool name
+      Setup_Sitecore: Folder permissions -->
+    <WebApplicationPool>sitecore-msbuild.local</WebApplicationPool>
+  </PropertyGroup>
+
+  <Target Name="Default">
+    <CallTarget Targets="Setup_Website" />
+    <CallTarget Targets="Setup_Sitecore" />
+  </Target>
+
+  
+  <Target Name="Setup_Sitecore">
+    <PropertyGroup>
+      <!-- Project Specific -->
+      <SitecoreZip>Sitecore 7.2 rev. 160123.zip</SitecoreZip>
+      <DMSZip>DMS 7.2 rev. 160123.zip</DMSZip>
+      
+      <!-- Global -->
+      <SitecoreInstallationLocation>C:\temp\sitecore_versions</SitecoreInstallationLocation>
+      
+      <!-- Runtime Variables -->
+      <SitecoreZipFolder>$(SitecoreZip.Substring(0, $(SitecoreZip.IndexOf('.zip'))))</SitecoreZipFolder>
+      <DMSZipFolder>$(DMSZip.Substring(0, $(DMSZip.IndexOf('.zip'))))</DMSZipFolder>
+    </PropertyGroup>
+
+    <!-- Extract Sitecore -->
+    <Message Text="1. Extract Sitecore" Importance="High" />
+    
+    <!-- If the SitecoreInstallationLocation exists we have already extracted this -->
+
+    <Message
+      Text="Already extracted to $(SitecoreZipExtractedLocation)"
+      Importance="normal"
+      Condition="Exists('$(SitecoreInstallationLocation)\$(SitecoreZipFolder)') == true" />
+    
+    <MSBuild.ExtensionPack.Compression.Zip
+      TaskAction="Extract"
+      ZipFileName="$(SitecoreInstallationLocation)\$(SitecoreZip)"
+      ExtractPath="$(SitecoreInstallationLocation)"
+      Condition="Exists('$(SitecoreInstallationLocation)\$(SitecoreZipFolder)') == false" />
+    
+    <!-- Move Sitecore files to WebRoot -->
+    <Message Text="2. Move Sitecore Files" Importance="High" />
+    
+    <!-- If the data folder exists we have already copied these files over -->
+
+    <Message
+      Text="Already copied to $(WebApplicationRoot)"
+      Importance="normal"
+      Condition="Exists('$(WebApplicationRoot)\Databases') == true" />
+    
+    <MSBuild.ExtensionPack.FileSystem.RoboCopy 
+      Source="$(SitecoreInstallationLocation)\$(SitecoreZipFolder)" 
+      Destination="$(WebApplicationRoot)" 
+      Files="*.*"
+      Options="/E"
+      Condition="Exists('$(WebApplicationRoot)\Databases') == false" />
+
+
+    <!-- Extract DMS -->
+    <Message Text="3. Extract DMS" Importance="High" />
+
+    <!-- If the SitecoreInstallationLocation exists we have already extracted this -->
+
+    <Message
+      Text="Already extracted to $(SitecoreInstallationLocation)\$(DMSZipFolder)"
+      Importance="normal"
+      Condition="Exists('$(SitecoreInstallationLocation)\$(DMSZipFolder)') == true"/>
+
+    <MSBuild.ExtensionPack.Compression.Zip
+      TaskAction="Extract"
+      ZipFileName="$(SitecoreInstallationLocation)\$(DMSZip)"
+      ExtractPath="$(SitecoreInstallationLocation)\$(DMSZipFolder)"
+      Condition="Exists('$(SitecoreInstallationLocation)\$(DMSZipFolder)') == false" />
+
+    <!-- Move DMS files to WebRoot -->
+    <Message Text="4. Move DMS Files" Importance="High" />
+
+    <!-- If the data folder exists we have already copied these files over -->
+
+    <Message
+      Text="Already copied to $(WebApplicationRoot)"
+      Importance="normal"
+      Condition="Exists('$(WebApplicationRoot)\Databases\Sitecore.Analytics.mdf') == true" />
+
+    <MSBuild.ExtensionPack.FileSystem.RoboCopy
+      Source="$(SitecoreInstallationLocation)\$(DMSZipFolder)"
+      Destination="$(WebApplicationRoot)\Databases"
+      Files="*.*df"
+      Options="/E"
+      Condition="Exists('$(WebApplicationRoot)\Databases\Sitecore.Analytics.mdf') == false" />
+
+    <MSBuild.ExtensionPack.FileSystem.RoboCopy
+      Source="$(SitecoreInstallationLocation)\$(DMSZipFolder)"
+      Destination="$(WebApplicationRoot)\website\App_Config\Include"
+      Files="*.config"
+      Options="/E"
+      Condition="Exists('$(WebApplicationRoot)\Databases\Sitecore.Analytics.mdf') == false" />
+
+
+    <!-- File Permissions -->
+    <Message Text="5. Sitecore Hardening Guide" Importance="High" />
+
+    <!-- TODO: There has to be a better way to get the Windows dir and ProgramData dirs, possibly optional overrides? -->
+    <ItemGroup>
+      <!--  -->
+      <!--<FilePermission_Modify Include="C:\Windows\Globalization\" />-->
+      <!--<FilePermission_Modify Include="C:\Windows\temp\" />-->
+      <!--<FilePermission_Modify Include="C:\ProgramData\Microsoft\Crypto" />-->
+      
+      <!-- Sitecore Hardening -->
+      <FilePermission_Modify Include="$(WebApplicationPath)upload" />
+      <FilePermission_Modify Include="$(WebApplicationPath)temp" />
+      <FilePermission_Modify Include="$(WebApplicationPath)sitecore\shell\Application\debug" />
+      <FilePermission_Modify Include="$(WebApplicationPath)sitecore\shell\Controls\debug" />
+      <FilePermission_Modify Include="$(WebApplicationPath)layouts" />
+      <FilePermission_Modify Include="$(WebApplicationPath)xsl" />
+      <FilePermission_Modify Include="$(WebApplicationPath)App_Data" />
+    </ItemGroup>
+
+    <MakeDir Directories="%(FilePermission_Modify.Identity)"/>
+    
+    <MSBuild.ExtensionPack.FileSystem.Folder 
+      TaskAction="AddSecurity" 
+      Path="%(FilePermission_Modify.Identity)" 
+      Users="iis apppool\$(WebApplicationPool)" 
+      AccessType="Allow"
+      Permission="Read,Write,Modify,Delete" />
+
+    <!-- Performance Counters -->
+    <Message Text="6. Performance Counters" Importance="High" />
+
+    <ItemGroup>
+      <PerformanceCounter Include="Performance Log Users" />
+      <PerformanceCounter Include="Performance Monitor Users" />
+    </ItemGroup>
+
+
+    <MSBuild.ExtensionPack.Computer.ActiveDirectory 
+      TaskAction="AddUserToGroup" 
+      User="$(WebApplicationPool)" 
+      Group="%(PerformanceCounter.Identity)"/>
+
+  </Target>
+
+  <!-- 
+  Should work for any website setup on IIS.
+  
+  -->
+  <Target Name="Setup_Website">
+    <PropertyGroup>
+      <!-- Project Specific -->
+      <WebApplicationName>sitecore-msbuild.local</WebApplicationName>
+      
+      <!-- Global -->
+      <WebApplicationPath Condition="'$(WebApplicationPath)' == ''">Included to allow overrides</WebApplicationPath>
+      <WebApplicationPool Condition="'$(WebApplicationPool)' == ''">$(WebApplicationPool)</WebApplicationPool>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <WebApplicationBinding Include="sitecore-msbuild.local" />
+      <WebApplicationBinding Include="sitecore-msbuild.1.local" />
+	  <WebApplicationBinding Include="sitecore-msbuild.2.local" />
+    </ItemGroup>
+
+    <!-- AppPool -->
+    <Message Text="1. AppPool" Importance="High" />
+    <MSBuild.ExtensionPack.Web.Iis7AppPool
+      TaskAction="Create"
+      Name="$(WebApplicationName)"
+      Force="True" />
+
+    <!-- Website -->
+    <Message Text="2. Website" Importance="High" />
+    <MSBuild.ExtensionPack.Web.Iis7Website
+        TaskAction="Create"
+        Name="$(WebApplicationName)"
+        Path="$(WebApplicationPath)"
+        AppPool="$(WebApplicationPool)"
+        Port="80"
+        Force="True" />
+
+    <!-- Bindings -->
+    <Message Text="3. Bindings" Importance="High" />
+    <MSBuild.ExtensionPack.Web.Iis7Binding
+      TaskAction="Add"
+      Name="$(WebApplicationName)"
+      BindingInformation="*:80:%(WebApplicationBinding.Identity)"
+      BindingProtocol="http" />
+
+    <!-- Bindings - Delete default binding -->    
+    <MSBuild.ExtensionPack.Web.Iis7Binding
+      TaskAction="Remove"
+      Name="$(WebApplicationName)"
+      BindingInformation="*:80:"/>
+
+    <!-- HostHeaders -->
+    <Message Text="4. HostHeaders" Importance="High" />
+    <MSBuild.ExtensionPack.Computer.HostsFile
+        TaskAction="SetHostEntry"
+        HostName="%(WebApplicationBinding.Identity)"
+        IPAddress="127.0.0.1" />
+
+    <!-- Start Site -->
+    <MSBuild.ExtensionPack.Web.Iis7Website
+       TaskAction="Start"
+       Name="$(WebApplicationName)" />
+
+    <!-- TODO: Self Signed Certificate -->
+    <Message Text="TODO: Self Signed SSL Certificate!" Importance="High" />
+  </Target>
+
+</Project>
