@@ -29,15 +29,16 @@
   <Target Name="Setup_Sitecore">
     <PropertyGroup>
       <!-- Project Specific -->
-      <SitecoreZip>Sitecore 7.2 rev. 160123.zip</SitecoreZip>
-      <DMSZip>DMS 7.2 rev. 160123.zip</DMSZip>
-      
+      <SitecoreZip>Sitecore 8.1 rev. 160519.zip</SitecoreZip>
+      <DMSZip></DMSZip>
+      <DatabasePrefix>AVJennings.</DatabasePrefix>
+
       <!-- Global -->
-      <SitecoreInstallationLocation>C:\temp\sitecore_versions</SitecoreInstallationLocation>
+      <SitecoreInstallationLocation>D:\temp\sitecore_versions</SitecoreInstallationLocation>
       
       <!-- Runtime Variables -->
       <SitecoreZipFolder>$(SitecoreZip.Substring(0, $(SitecoreZip.IndexOf('.zip'))))</SitecoreZipFolder>
-      <DMSZipFolder>$(DMSZip.Substring(0, $(DMSZip.IndexOf('.zip'))))</DMSZipFolder>
+      <DMSZipFolder Condition="'$(DMSZip)' != ''">$(DMSZip.Substring(0, $(DMSZip.IndexOf('.zip'))))</DMSZipFolder>
     </PropertyGroup>
 
     <!-- Extract Sitecore -->
@@ -46,7 +47,7 @@
     <!-- If the SitecoreInstallationLocation exists we have already extracted this -->
 
     <Message
-      Text="Already extracted to $(SitecoreZipExtractedLocation)"
+      Text="Already extracted to $(SitecoreInstallationLocation)\$(SitecoreZipFolder)"
       Importance="normal"
       Condition="Exists('$(SitecoreInstallationLocation)\$(SitecoreZipFolder)') == true" />
     
@@ -59,20 +60,42 @@
     <!-- Move Sitecore files to WebRoot -->
     <Message Text="2. Move Sitecore Files" Importance="High" />
     
-    <!-- If the data folder exists we have already copied these files over -->
+    <!-- Check each main folder for existance and copy (this allows us to quickly setup the website again without touching the database) -->
 
     <Message
-      Text="Already copied to $(WebApplicationRoot)"
+      Text="Already copied Databases to $(WebApplicationRoot)"
       Importance="normal"
       Condition="Exists('$(WebApplicationRoot)\Databases') == true" />
     
     <MSBuild.ExtensionPack.FileSystem.RoboCopy 
-      Source="$(SitecoreInstallationLocation)\$(SitecoreZipFolder)" 
-      Destination="$(WebApplicationRoot)" 
+      Source="$(SitecoreInstallationLocation)\$(SitecoreZipFolder)\Databases" 
+      Destination="$(WebApplicationRoot)\Databases" 
       Files="*.*"
-      Options="/E"
       Condition="Exists('$(WebApplicationRoot)\Databases') == false" />
 
+    <Message
+      Text="Already copied Data to $(WebApplicationRoot)"
+      Importance="normal"
+      Condition="Exists('$(WebApplicationRoot)\Data') == true" />
+    
+    <MSBuild.ExtensionPack.FileSystem.RoboCopy 
+      Source="$(SitecoreInstallationLocation)\$(SitecoreZipFolder)\Data" 
+      Destination="$(WebApplicationRoot)\Data" 
+      Files="*.*"
+      Options="/E"
+      Condition="Exists('$(WebApplicationRoot)\Data') == false" />
+
+    <Message
+      Text="Already copied Website to $(WebApplicationRoot)"
+      Importance="normal"
+      Condition="Exists('$(WebApplicationRoot)\Website\web.config') == true" />
+    
+    <MSBuild.ExtensionPack.FileSystem.RoboCopy 
+      Source="$(SitecoreInstallationLocation)\$(SitecoreZipFolder)\Website" 
+      Destination="$(WebApplicationRoot)\Website" 
+      Files="*.*"
+      Options="/E"
+      Condition="Exists('$(WebApplicationRoot)\Website\web.config') == false" />
 
     <!-- Extract DMS -->
     <Message Text="3. Extract DMS" Importance="High" />
@@ -92,6 +115,7 @@
 
     <!-- Move DMS files to WebRoot -->
     <Message Text="4. Move DMS Files" Importance="High" />
+	<Message Text="TODO. Move DMS Files" Importance="High" />
 
     <!-- If the data folder exists we have already copied these files over -->
 
@@ -104,15 +128,18 @@
       Source="$(SitecoreInstallationLocation)\$(DMSZipFolder)"
       Destination="$(WebApplicationRoot)\Databases"
       Files="*.*df"
-      Options="/E"
       Condition="Exists('$(WebApplicationRoot)\Databases\Sitecore.Analytics.mdf') == false" />
 
     <MSBuild.ExtensionPack.FileSystem.RoboCopy
       Source="$(SitecoreInstallationLocation)\$(DMSZipFolder)"
       Destination="$(WebApplicationRoot)\website\App_Config\Include"
       Files="*.config"
-      Options="/E"
       Condition="Exists('$(WebApplicationRoot)\Databases\Sitecore.Analytics.mdf') == false" />
+
+    <MSBuild.ExtensionPack.FileSystem.RoboCopy
+      Source="$(SitecoreInstallationLocation)"
+      Destination="$(WebApplicationRoot)\Data"
+      Files="license.xml" />
 
 
     <!-- File Permissions -->
@@ -125,7 +152,12 @@
       <!--<FilePermission_Modify Include="C:\Windows\temp\" />-->
       <!--<FilePermission_Modify Include="C:\ProgramData\Microsoft\Crypto" />-->
       
+      <FilePermission_Read Include="$(WebApplicationPath)" />
+
       <!-- Sitecore Hardening -->
+      <FilePermission_Modify Include="$(WebApplicationRoot)\Data" />
+      <FilePermission_Modify Include="$(WebApplicationRoot)\Databases" />
+
       <FilePermission_Modify Include="$(WebApplicationPath)upload" />
       <FilePermission_Modify Include="$(WebApplicationPath)temp" />
       <FilePermission_Modify Include="$(WebApplicationPath)sitecore\shell\Application\debug" />
@@ -133,10 +165,58 @@
       <FilePermission_Modify Include="$(WebApplicationPath)layouts" />
       <FilePermission_Modify Include="$(WebApplicationPath)xsl" />
       <FilePermission_Modify Include="$(WebApplicationPath)App_Data" />
+
+
+      <Database_Analytics Include="$(DatabasePrefix)Analytics">
+          <Owner></Owner>
+          <AttachOptions>1</AttachOptions>
+          <UpdateStatistics>true</UpdateStatistics>
+          <RemoveFulltextIndexFile>true</RemoveFulltextIndexFile>
+          <Files>$(WebApplicationRoot)\Databases\Sitecore.Analytics.MDF;$(WebApplicationRoot)\Databases\Sitecore.Analytics.ldf</Files>
+      </Database_Analytics>
+
+      <Database_Core Include="$(DatabasePrefix)Core">
+          <Owner></Owner>
+          <AttachOptions>1</AttachOptions>
+          <UpdateStatistics>true</UpdateStatistics>
+          <RemoveFulltextIndexFile>true</RemoveFulltextIndexFile>
+          <Files>$(WebApplicationRoot)\Databases\Sitecore.Core.MDF;$(WebApplicationRoot)\Databases\Sitecore.Core.ldf</Files>
+      </Database_Core>
+
+      <Database_Master Include="$(DatabasePrefix)Master">
+          <Owner></Owner>
+          <AttachOptions>1</AttachOptions>
+          <UpdateStatistics>true</UpdateStatistics>
+          <RemoveFulltextIndexFile>true</RemoveFulltextIndexFile>
+          <Files>$(WebApplicationRoot)\Databases\Sitecore.Master.MDF;$(WebApplicationRoot)\Databases\Sitecore.Master.ldf</Files>
+      </Database_Master>
+
+      <Database_Sessions Include="$(DatabasePrefix)Sessions">
+          <Owner></Owner>
+          <AttachOptions>1</AttachOptions>
+          <UpdateStatistics>true</UpdateStatistics>
+          <RemoveFulltextIndexFile>true</RemoveFulltextIndexFile>
+          <Files>$(WebApplicationRoot)\Databases\Sitecore.Sessions.MDF;$(WebApplicationRoot)\Databases\Sitecore.Sessions.ldf</Files>
+      </Database_Sessions>
+
+      <Database_Web Include="$(DatabasePrefix)Web">
+          <Owner></Owner>
+          <AttachOptions>1</AttachOptions>
+          <UpdateStatistics>true</UpdateStatistics>
+          <RemoveFulltextIndexFile>true</RemoveFulltextIndexFile>
+          <Files>$(WebApplicationRoot)\Databases\Sitecore.Web.MDF;$(WebApplicationRoot)\Databases\Sitecore.Web.ldf</Files>
+      </Database_Web>
     </ItemGroup>
 
     <MakeDir Directories="%(FilePermission_Modify.Identity)"/>
     
+    <MSBuild.ExtensionPack.FileSystem.Folder 
+      TaskAction="AddSecurity" 
+      Path="%(FilePermission_Read.Identity)" 
+      Users="iis apppool\$(WebApplicationPool)" 
+      AccessType="Allow"
+      Permission="Read" />
+
     <MSBuild.ExtensionPack.FileSystem.Folder 
       TaskAction="AddSecurity" 
       Path="%(FilePermission_Modify.Identity)" 
@@ -144,19 +224,63 @@
       AccessType="Allow"
       Permission="Read,Write,Modify,Delete" />
 
-    <!-- Performance Counters -->
-    <Message Text="6. Performance Counters" Importance="High" />
+    
+    <!-- Database -->
+    <Message Text="6. Attaching Databases" Importance="High" />
+    
+    <Message Text="TODO: Create and Associate SQL Users" Importance="High" />
 
+    <MSBuild.ExtensionPack.Sql2014.Database 
+      TaskAction="CheckExists" 
+      DatabaseItem="@(Database_Master)">
+        <Output TaskParameter="Exists" PropertyName="MasterDatabaseExists"/>
+    </MSBuild.ExtensionPack.Sql2014.Database>
+    
+    <Message Text="Master Database Exists: $(MasterDatabaseExists)"/>
+
+    <!-- TODO: There has to be a way to just enumerate the itemgroup for this -->
+
+    <MSBuild.ExtensionPack.Sql2014.Database 
+      TaskAction="Attach" 
+      DatabaseItem="@(Database_Analytics)"
+      Condition="$(MasterDatabaseExists) == false" />
+
+    <MSBuild.ExtensionPack.Sql2014.Database 
+      TaskAction="Attach" 
+      DatabaseItem="@(Database_Core)"
+      Condition="$(MasterDatabaseExists) == false" />
+
+    <MSBuild.ExtensionPack.Sql2014.Database 
+      TaskAction="Attach" 
+      DatabaseItem="@(Database_Master)"
+      Condition="$(MasterDatabaseExists) == false" />
+
+    <MSBuild.ExtensionPack.Sql2014.Database 
+      TaskAction="Attach" 
+      DatabaseItem="@(Database_Sessions)"
+      Condition="$(MasterDatabaseExists) == false" />
+
+    <MSBuild.ExtensionPack.Sql2014.Database 
+      TaskAction="Attach" 
+      DatabaseItem="@(Database_Web)"
+      Condition="$(MasterDatabaseExists) == false" />
+    
+
+    <!-- Performance Counters -->
+    <Message Text="X. Performance Counters" Importance="High" />
+    <Message Text="TODO: Implement Performance counters" Importance="High" />
+
+    <!--
     <ItemGroup>
       <PerformanceCounter Include="Performance Log Users" />
       <PerformanceCounter Include="Performance Monitor Users" />
     </ItemGroup>
 
-
     <MSBuild.ExtensionPack.Computer.ActiveDirectory 
       TaskAction="AddUserToGroup" 
       User="$(WebApplicationPool)" 
       Group="%(PerformanceCounter.Identity)"/>
+    -->
 
   </Target>
 
@@ -167,17 +291,16 @@
   <Target Name="Setup_Website">
     <PropertyGroup>
       <!-- Project Specific -->
-      <WebApplicationName>sitecore-msbuild.local</WebApplicationName>
       
       <!-- Global -->
-      <WebApplicationPath Condition="'$(WebApplicationPath)' == ''">Included to allow overrides</WebApplicationPath>
+      <WebApplicationName Condition="'$(WebApplicationName)' == ''">$(WebApplicationPool)</WebApplicationName>
       <WebApplicationPool Condition="'$(WebApplicationPool)' == ''">$(WebApplicationPool)</WebApplicationPool>
     </PropertyGroup>
 
     <ItemGroup>
-      <WebApplicationBinding Include="sitecore-msbuild.local" />
-      <WebApplicationBinding Include="sitecore-msbuild.1.local" />
-	  <WebApplicationBinding Include="sitecore-msbuild.2.local" />
+      <!-- Project Specific -->
+      <!-- by default bind to the WebApplicationName -->
+      <WebApplicationBinding Include="$(WebApplicationName)" />
     </ItemGroup>
 
     <!-- AppPool -->
@@ -185,6 +308,7 @@
     <MSBuild.ExtensionPack.Web.Iis7AppPool
       TaskAction="Create"
       Name="$(WebApplicationName)"
+      IdentityType="ApplicationPoolIdentity"
       Force="True" />
 
     <!-- Website -->
